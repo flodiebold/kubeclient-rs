@@ -31,6 +31,9 @@ impl NetworkPolicy {
 }
 
 impl Resource for NetworkPolicy {
+    fn metadata(&self) -> &ObjectMeta {
+        &self.metadata
+    }
     fn kind() -> Kind { Kind::NetworkPolicy }
 }
 

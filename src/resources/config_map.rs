@@ -46,5 +46,8 @@ impl ConfigMap {
 }
 
 impl Resource for ConfigMap {
+    fn metadata(&self) -> &ObjectMeta {
+        &self.metadata
+    }
     fn kind() -> Kind { Kind::ConfigMap }
 }

@@ -62,6 +62,9 @@ impl Deployment {
 }
 
 impl Resource for Deployment {
+    fn metadata(&self) -> &ObjectMeta {
+        &self.metadata
+    }
     fn kind() -> Kind { Kind::Deployment }
 }
 

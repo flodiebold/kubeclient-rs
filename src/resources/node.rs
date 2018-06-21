@@ -35,6 +35,9 @@ impl Node {
 }
 
 impl Resource for Node {
+    fn metadata(&self) -> &ObjectMeta {
+        &self.metadata
+    }
     fn kind() -> Kind { Kind::Node }
 }
 

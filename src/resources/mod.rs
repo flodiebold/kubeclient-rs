@@ -60,6 +60,8 @@ impl fmt::Display for Kind {
 }
 
 pub trait Resource: Serialize + DeserializeOwned {
+    fn metadata(&self) -> &ObjectMeta;
+
     fn kind() -> Kind;
     fn api() -> &'static str {
         Self::kind().api

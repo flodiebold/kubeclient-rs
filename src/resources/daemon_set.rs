@@ -35,6 +35,9 @@ impl DaemonSet {
 }
 
 impl Resource for DaemonSet {
+    fn metadata(&self) -> &ObjectMeta {
+        &self.metadata
+    }
     fn kind() -> Kind { Kind::DaemonSet }
 }
 

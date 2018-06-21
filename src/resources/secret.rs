@@ -51,5 +51,8 @@ impl Secret {
 }
 
 impl Resource for Secret {
+    fn metadata(&self) -> &ObjectMeta {
+        &self.metadata
+    }
     fn kind() -> Kind { Kind::Secret }
 }

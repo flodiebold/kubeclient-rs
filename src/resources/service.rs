@@ -34,6 +34,9 @@ impl Service {
 }
 
 impl Resource for Service {
+    fn metadata(&self) -> &ObjectMeta {
+        &self.metadata
+    }
     fn kind() -> Kind { Kind::Service }
 }
 

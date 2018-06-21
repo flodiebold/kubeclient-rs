@@ -76,6 +76,9 @@ impl Pod {
 }
 
 impl Resource for Pod {
+    fn metadata(&self) -> &ObjectMeta {
+        &self.metadata
+    }
     fn kind() -> Kind { Kind::Pod }
 }
 
