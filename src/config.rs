@@ -13,6 +13,7 @@ use openssl::pkey::PKey;
 use url::Url;
 use url_serde;
 use base64;
+use failure::ResultExt;
 use errors::*;
 
 /// Configuration to build a Kubernetes client.
@@ -155,34 +156,34 @@ pub struct ClusterContext {
 
 impl KubeConfig {
     pub fn load<P: AsRef<Path>>(path: P) -> Result<KubeConfig> {
-        let f = File::open(path.as_ref()).chain_err(|| "Unable to open kubeconfig file")?;
-        serde_yaml::from_reader(f).chain_err(|| "Unable to parse kubeconfig file")
+        let f = File::open(path.as_ref()).context(ErrorKind::Config)?;
+        Ok(serde_yaml::from_reader(f).context(ErrorKind::Config)?)
     }
 
     pub fn context(&self, name: &str) -> Result<ClusterContext> {
         let ctxs: Vec<&NamedContext> = self.contexts.iter().filter(|c| c.name == name).collect();
         let ctx = match ctxs.len() {
-            0 => bail!("unknown context {}", name),
+            0 => Err(ErrorKind::ConfigContext)?,
             1 => &ctxs[0].context,
-            _ => bail!("ambiguous context {}", name),
+            _ => Err(ErrorKind::ConfigContext)?,
         };
         let clus: Vec<&NamedCluster> = self.clusters
             .iter()
             .filter(|c| c.name == ctx.cluster)
             .collect();
         let clu = match clus.len() {
-            0 => bail!("unknown cluster {}", name),
+            0 => Err(ErrorKind::ConfigContext)?,
             1 => &clus[0].cluster,
-            _ => bail!("ambiguous cluster {}", name),
+            _ => Err(ErrorKind::ConfigContext)?,
         };
         let auths: Vec<&NamedAuthInfo> = self.users
             .iter()
             .filter(|c| c.name == ctx.user)
             .collect();
         let auth = match auths.len() {
-            0 => bail!("unknown auth-info {}", name),
+            0 => Err(ErrorKind::ConfigContext)?,
             1 => &auths[0].user,
-            _ => bail!("ambiguous auth-info {}", name),
+            _ => Err(ErrorKind::ConfigContext)?,
         };
         let rc = ClusterContext {
             name: name.to_string(),

@@ -190,7 +190,7 @@ impl Kubernetes {
     pub fn apply<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let _: Vec<Value> = self.low_level.each_resource_path(path, |path| {
             self.low_level.apply_file(&path)
-                .chain_err(|| format!("Failed to apply {}", path.display()))
+                //.chain_err(|| format!("Failed to apply {}", path.display()))
         })?;
 
         Ok(())
@@ -214,7 +214,7 @@ impl Kubernetes {
     pub fn replace<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let _: Vec<Value> = self.low_level.each_resource_path(path, |path| {
             self.low_level.replace_file(&path)
-                .chain_err(|| format!("Failed to replace {}", path.display()))
+                //.chain_err(|| format!("Failed to replace {}", path.display()))
         })?;
 
         Ok(())

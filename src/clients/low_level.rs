@@ -13,6 +13,7 @@ use url::Url;
 use std::borrow::Borrow;
 use walkdir::WalkDir;
 use errors::*;
+use failure::ResultExt;
 use k8s_openapi::v1_10::apimachinery::pkg::apis::meta::v1::ObjectMeta;
 
 
@@ -50,7 +51,8 @@ impl KubeLowLevel {
         let client = if auth_info.client_certificate().is_some() && auth_info.client_key().is_some() {
             let crt = auth_info.client_certificate().unwrap();
             let key = auth_info.client_key().unwrap();
-            let pkcs_cert = Pkcs12::builder().build("", "admin", &key, &crt).chain_err(|| "Failed to build Pkcs12")?;
+            let pkcs_cert = Pkcs12::builder().build("", "admin", &key, &crt)
+                .context(ErrorKind::Pkcs)?;
             let req_pkcs_cert = reqwest::Identity::from_pkcs12_der(&pkcs_cert.to_der().unwrap(), "").unwrap();
             client.identity(req_pkcs_cert)
         } else { &mut client };
@@ -69,15 +71,18 @@ impl KubeLowLevel {
         let client = client.default_headers(headers)
                            .danger_disable_hostname_verification()
                            .build()
-                           .chain_err(|| "Failed to build reqwest client")?;
+                           .context(ErrorKind::ReqwestInit)?;
 
         Ok(KubeLowLevel { client, base_url: cluster.server })
     }
 
     pub fn health(&self) -> Result<String> {
-        let mut response = self.http_get(self.base_url.join("healthz")?)?;
+        let mut response = self.http_get(self.base_url.join("healthz")
+                                         .context(ErrorKind::Url)?)
+            .context(ErrorKind::Request)?;
         let mut output = String::new();
-        let _ = response.read_to_string(&mut output)?;
+        let _ = response.read_to_string(&mut output)
+            .context(ErrorKind::Request)?;
         Ok(output)
     }
 
@@ -86,15 +91,15 @@ impl KubeLowLevel {
         let url = route.build(&self.base_url)?;
         let mut response = self.client.get(url)
             .send()
-            .chain_err(|| "Failed to GET URL")?;
+            .context(ErrorKind::Request)?;
 
         match response.status() {
             StatusCode::NotFound => Ok(false),
             s if s.is_success() => Ok(true),
             _ => {
                 let status: Status = response.json()
-                    .chain_err(|| "Failed to decode error response as 'Status'")?;
-                bail!(status.message);
+                    .context(ErrorKind::Json)?;
+                Err(ErrorKind::Status(status.message).into())
             }
         }
     }
@@ -156,14 +161,15 @@ impl KubeLowLevel {
     {
         let mut bytes = Vec::new();
         let ext = path.extension().unwrap().to_string_lossy().to_lowercase();
-        let mut file = File::open(path)?;
-        file.read_to_end(&mut bytes)?;
+        let mut file = File::open(path).context(ErrorKind::ResourceFileIo)?;
+        file.read_to_end(&mut bytes).context(ErrorKind::ResourceFileIo)?;
         let body: Value = match &*ext {
-            "json" => serde_json::from_slice(&bytes)?,
-            "yaml" => serde_yaml::from_slice(&bytes)?,
+            "json" => serde_json::from_slice(&bytes).context(ErrorKind::ResourceFileParsing)?,
+            "yaml" => serde_yaml::from_slice(&bytes).context(ErrorKind::ResourceFileParsing)?,
             _ => unreachable!("kubeclient bug: unexpected and unfiltered file extension"),
         };
-        let mini: MinimalResource = serde_json::from_value(body.clone())?;
+        let mini: MinimalResource = serde_json::from_value(body.clone())
+            .context(ErrorKind::ResourceFileParsing)?;
 
         let root = if mini.api_version.starts_with("v") {
             "/api"
@@ -175,12 +181,14 @@ impl KubeLowLevel {
             Some(ns) => format!("{}/{}/namespaces/{}/{}", root, mini.api_version, ns, mini.kind.plural),
             None =>format!("{}/{}/{}", root, mini.api_version, mini.kind.plural),
         };
-        let kind_url = self.base_url.join(&kind_path)?;
-        let resource_url = self.base_url.join(&format!("{}/{}", kind_path, name))?;
+        let kind_url = self.base_url.join(&kind_path)
+            .context(ErrorKind::Url)?;
+        let resource_url = self.base_url.join(&format!("{}/{}", kind_path, name))
+            .context(ErrorKind::Url)?;
 
         // First check if resource already exists
         let mut response = self.client.get(resource_url).send()
-            .chain_err(|| "Failed to GET URL")?;
+            .context(ErrorKind::Request)?;
         match response.status() {
             // Apply if resource doesn't exist
             StatusCode::NotFound => {
@@ -189,14 +197,14 @@ impl KubeLowLevel {
             }
             // Return it if it already exists
             s if s.is_success() => {
-                let resp = response.json().chain_err(|| "Failed to decode JSON response")?;
+                let resp = response.json().context(ErrorKind::Json)?;
                 Ok(resp)
             }
             // Propogate any other error
             _ => {
                 let status: Status = response.json()
-                    .chain_err(|| "Failed to decode error response as 'Status'")?;
-                bail!(status.message);
+                    .context(ErrorKind::Json)?;
+                Err(ErrorKind::Status(status.message).into())
             }
         }
     }
@@ -206,14 +214,14 @@ impl KubeLowLevel {
     {
         let mut bytes = Vec::new();
         let ext = path.extension().unwrap().to_string_lossy().to_lowercase();
-        let mut file = File::open(path)?;
-        file.read_to_end(&mut bytes)?;
+        let mut file = File::open(path).context(ErrorKind::ResourceFileIo)?;
+        file.read_to_end(&mut bytes).context(ErrorKind::ResourceFileIo)?;
         let body: Value = match &*ext {
-            "json" => serde_json::from_slice(&bytes)?,
-            "yaml" => serde_yaml::from_slice(&bytes)?,
+            "json" => serde_json::from_slice(&bytes).context(ErrorKind::ResourceFileParsing)?,
+            "yaml" => serde_yaml::from_slice(&bytes).context(ErrorKind::ResourceFileParsing)?,
             _ => unreachable!("kubeclient bug: unexpected and unfiltered file extension"),
         };
-        let mini: MinimalResource = serde_json::from_value(body.clone())?;
+        let mini: MinimalResource = serde_json::from_value(body.clone()).context(ErrorKind::ResourceFileParsing)?;
 
         let root = if mini.api_version.starts_with("v") {
             "/api"
@@ -224,10 +232,10 @@ impl KubeLowLevel {
         let url = match mini.metadata.namespace {
             Some(ns) => self.base_url.join(
                 &format!("{}/{}/namespaces/{}/{}/{}", root, mini.api_version, ns, mini.kind.plural, name)
-                )?,
+            ).context(ErrorKind::Url)?,
             None => self.base_url.join(
                 &format!("{}/{}/{}/{}", root, mini.api_version, mini.kind.plural, name)
-                )?,
+            ).context(ErrorKind::Url)?,
         };
         let resp = self.http_put_json(url, &body)?;
         Ok(resp)
@@ -245,19 +253,20 @@ impl KubeLowLevel {
     pub(crate) fn http_get(&self, url: Url) -> Result<reqwest::Response> {
         let mut req = self.client.get(url);
 
-        let mut response = req.send().chain_err(|| "Failed to GET URL")?;
+        let mut response = req.send().context(ErrorKind::Request)?;
 
         if !response.status().is_success() {
             let status: Status = response.json()
-                .chain_err(|| "Failed to decode kubernetes error response as 'Status'")?;
-            bail!(format!("Kubernetes API error: {}", status.message));
+                .context(ErrorKind::Json)?;
+            Err(ErrorKind::Status(status.message).into())
+        } else {
+            Ok(response)
         }
-        Ok(response)
     }
 
     pub(crate) fn http_get_json<D: DeserializeOwned>(&self, url: Url) -> Result<D> {
         let mut response = self.http_get(url)?;
-        Ok(response.json().chain_err(|| "Failed to decode JSON response")?)
+        Ok(response.json().context(ErrorKind::Json)?)
     }
 
     pub(crate) fn http_post_json<S, D>(&self, url: Url, body: &S) -> Result<D>
@@ -267,15 +276,16 @@ impl KubeLowLevel {
         let mut response = self.client.post(url)
             .json(&body)
             .send()
-            .chain_err(|| "Failed to POST URL")?;
+            .context(ErrorKind::Request)?;
 
         if !response.status().is_success() {
             let status: Status = response.json()
-                .chain_err(|| "Failed to decode kubernetes error response as 'Status'")?;
-            bail!(format!("Kubernetes API error: {}", status.message));
+                .context(ErrorKind::Json)?;
+            Err(ErrorKind::Status(status.message).into())
+        } else {
+            Ok(response.json().context(ErrorKind::Json)?)
         }
 
-        Ok(response.json().chain_err(|| "Failed to decode JSON response")?)
     }
 
     pub(crate) fn http_put_json<S, D>(&self, url: Url, body: &S) -> Result<D>
@@ -285,29 +295,29 @@ impl KubeLowLevel {
         let mut response = self.client.put(url)
             .json(&body)
             .send()
-            .chain_err(|| "Failed to PUT URL")?;
+            .context(ErrorKind::Request)?;
 
         if !response.status().is_success() {
             let status: Status = response.json()
-                .chain_err(|| "Failed to decode kubernetes error response as 'Status'")?;
-            bail!(format!("Kubernetes API error: {}", status.message));
+                .context(ErrorKind::Json)?;
+            Err(ErrorKind::Status(status.message).into())
+        } else {
+            Ok(response.json().context(ErrorKind::Json)?)
         }
-
-        Ok(response.json().chain_err(|| "Failed to decode JSON response")?)
     }
 
     pub(crate) fn http_delete(&self, url: Url) -> Result<reqwest::Response> {
         let mut response = self.client.delete(url)
             .send()
-            .chain_err(|| "Failed to DELETE URL")?;
+            .context(ErrorKind::Request)?;
 
         if !response.status().is_success() {
             let status: Status = response.json()
-                .chain_err(|| "Failed to decode kubernetes error response as 'Status'")?;
-            bail!(format!("Kubernetes API error: {}", status.message));
+                .context(ErrorKind::Json)?;
+            Err(ErrorKind::Status(status.message).into())
+        } else {
+            Ok(response)
         }
-
-        Ok(response)
     }
 
 }
@@ -366,7 +376,7 @@ impl<'a> KindRoute<'a> {
             Some(ns) => format!("{}/namespaces/{}/{}", self.api, ns, self.kind),
             None => format!("{}/{}", self.api, self.kind),
         };
-        let mut url = base_url.join(&path)?;
+        let mut url = base_url.join(&path).context(ErrorKind::Url)?;
         if let Some(ref query) = self.query {
             url.query_pairs_mut().extend_pairs(query);
         }
@@ -412,7 +422,7 @@ impl<'a> ResourceRoute<'a> {
             Some(ns) => format!("{}/namespaces/{}/{}/{}", self.api, ns, self.kind, self.resource),
             None => format!("{}/{}/{}", self.api, self.kind, self.resource),
         };
-        let mut url = base_url.join(&path)?;
+        let mut url = base_url.join(&path).context(ErrorKind::Url)?;
         if let Some(ref query) = self.query {
             url.query_pairs_mut().extend_pairs(query);
         }
