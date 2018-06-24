@@ -82,6 +82,7 @@ pub struct Status {
     pub kind: String,
     pub api_version: String,
     pub metadata: ObjectMeta,
+    pub reason: Option<String>,
     pub status: String,
     pub message: String,
 }
