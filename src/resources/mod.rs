@@ -76,12 +76,11 @@ pub trait ListableResource: Resource {
     fn list_items(response: Self::ListResponse) -> Vec<Self>;
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Status {
     pub kind: String,
     pub api_version: String,
-    pub metadata: ObjectMeta,
     pub reason: Option<String>,
     pub status: String,
     pub message: String,

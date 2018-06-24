@@ -99,7 +99,7 @@ impl KubeLowLevel {
             _ => {
                 let status: Status = response.json()
                     .context(ErrorKind::Json)?;
-                Err(ErrorKind::Status(status.reason.unwrap_or_else(|| "Unknown".to_owned())).into())
+                Err(ErrorKind::Status(response.status().as_u16(), status).into())
             }
         }
     }
@@ -204,7 +204,7 @@ impl KubeLowLevel {
             _ => {
                 let status: Status = response.json()
                     .context(ErrorKind::Json)?;
-                Err(ErrorKind::Status(status.reason.unwrap_or_else(|| "Unknown".to_owned())).into())
+                Err(ErrorKind::Status(response.status().as_u16(), status).into())
             }
         }
     }
@@ -258,7 +258,7 @@ impl KubeLowLevel {
         if !response.status().is_success() {
             let status: Status = response.json()
                 .context(ErrorKind::Json)?;
-            Err(ErrorKind::Status(status.reason.unwrap_or_else(|| "Unknown".to_owned())).into())
+            Err(ErrorKind::Status(response.status().as_u16(), status).into())
         } else {
             Ok(response)
         }
@@ -281,7 +281,7 @@ impl KubeLowLevel {
         if !response.status().is_success() {
             let status: Status = response.json()
                 .context(ErrorKind::Json)?;
-            Err(ErrorKind::Status(status.reason.unwrap_or_else(|| "Unknown".to_owned())).into())
+            Err(ErrorKind::Status(response.status().as_u16(), status).into())
         } else {
             Ok(response.json().context(ErrorKind::Json)?)
         }
@@ -300,7 +300,7 @@ impl KubeLowLevel {
         if !response.status().is_success() {
             let status: Status = response.json()
                 .context(ErrorKind::Json)?;
-            Err(ErrorKind::Status(status.reason.unwrap_or_else(|| "Unknown".to_owned())).into())
+            Err(ErrorKind::Status(response.status().as_u16(), status).into())
         } else {
             Ok(response.json().context(ErrorKind::Json)?)
         }
@@ -314,7 +314,7 @@ impl KubeLowLevel {
         if !response.status().is_success() {
             let status: Status = response.json()
                 .context(ErrorKind::Json)?;
-            Err(ErrorKind::Status(status.reason.unwrap_or_else(|| "Unknown".to_owned())).into())
+            Err(ErrorKind::Status(response.status().as_u16(), status).into())
         } else {
             Ok(response)
         }

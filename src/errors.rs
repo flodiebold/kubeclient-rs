@@ -1,3 +1,4 @@
+use resources::Status;
 use std::fmt::{self, Display};
 use failure::{Backtrace, Context, Fail};
 
@@ -25,6 +26,30 @@ impl Display for Error {
 impl Error {
     pub fn kind(&self) -> ErrorKind {
         self.inner.get_context().clone()
+    }
+
+    pub fn is_kubernetes_status(&self) -> bool {
+        if let &ErrorKind::Status(_, _) = self.inner.get_context() {
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn kubernetes_status(&self) -> Option<&Status> {
+        if let &ErrorKind::Status(_, ref s) = self.inner.get_context() {
+            Some(s)
+        } else {
+            None
+        }
+    }
+
+    pub fn http_status(&self) -> Option<u16> {
+        if let &ErrorKind::Status(s, _) = self.inner.get_context() {
+            Some(s)
+        } else {
+            None
+        }
     }
 }
 
@@ -57,7 +82,7 @@ pub enum ErrorKind {
     #[fail(display = "Failed to parse resource file")]
     ResourceFileParsing,
     #[fail(display = "Kubernetes status: {}", _0)]
-    Status(String),
+    Status(u16, Status),
     #[fail(display = "Failed to load Kubernetes config file")]
     Config,
     #[fail(display = "Failed to find the chosen context")]
