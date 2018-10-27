@@ -1,4 +1,5 @@
 use reqwest::{self, header, StatusCode};
+use headers_ext::{self, HeaderMapExt};
 use std::path::Path;
 use config::KubeConfig;
 use resources::*;
@@ -40,13 +41,13 @@ impl KubeLowLevel {
 
         let cluster = context.cluster;
 
-        let mut headers = header::Headers::new();
-        let mut client = reqwest::Client::builder();
+        let mut headers = header::HeaderMap::new();
+        let client = reqwest::Client::builder();
 
-        let mut client = if let Some(ca_cert) = cluster.ca_cert() {
+        let client = if let Some(ca_cert) = cluster.ca_cert() {
             let req_ca_cert = reqwest::Certificate::from_der(&ca_cert.to_der().unwrap()).unwrap();
             client.add_root_certificate(req_ca_cert)
-        } else { &mut client };
+        } else { client };
 
         let client = if auth_info.client_certificate().is_some() && auth_info.client_key().is_some() {
             let crt = auth_info.client_certificate().unwrap();
@@ -55,21 +56,19 @@ impl KubeLowLevel {
                 .context(ErrorKind::Pkcs)?;
             let req_pkcs_cert = reqwest::Identity::from_pkcs12_der(&pkcs_cert.to_der().unwrap(), "").unwrap();
             client.identity(req_pkcs_cert)
-        } else { &mut client };
-        
-        if let Some(username) = auth_info.username {
-            headers.set(header::Authorization(
-                header::Basic { username: username,
-                                password: auth_info.password }
+        } else { client };
+
+        if let (Some(username), Some(password)) = (auth_info.username, auth_info.password) {
+            headers.typed_insert(headers_ext::Authorization::basic(
+                &username, &password
             ));
         } else if let Some(token) = auth_info.token {
-            headers.set(header::Authorization(
-                header::Bearer { token: token }
-            ));
+            headers.typed_insert(headers_ext::Authorization::bearer(&token)
+                                 .map_err(|_| format_err!("Invalid bearer token"))
+                                 .context(ErrorKind::Config)?);
         }
 
         let client = client.default_headers(headers)
-                           .danger_disable_hostname_verification()
                            .build()
                            .context(ErrorKind::ReqwestInit)?;
 
@@ -94,7 +93,7 @@ impl KubeLowLevel {
             .context(ErrorKind::Request)?;
 
         match response.status() {
-            StatusCode::NotFound => Ok(false),
+            StatusCode::NOT_FOUND => Ok(false),
             s if s.is_success() => Ok(true),
             _ => {
                 let status: Status = response.json()
@@ -191,7 +190,7 @@ impl KubeLowLevel {
             .context(ErrorKind::Request)?;
         match response.status() {
             // Apply if resource doesn't exist
-            StatusCode::NotFound => {
+            StatusCode::NOT_FOUND => {
                 let resp = self.http_post_json(kind_url, &body)?;
                 Ok(resp)
             }
@@ -251,7 +250,7 @@ impl KubeLowLevel {
     //
 
     pub(crate) fn http_get(&self, url: Url) -> Result<reqwest::Response> {
-        let mut req = self.client.get(url);
+        let req = self.client.get(url);
 
         let mut response = req.send().context(ErrorKind::Request)?;
 
